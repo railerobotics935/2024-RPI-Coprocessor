@@ -371,14 +371,16 @@ if __name__ == "__main__":
                                 tag_state[tag_id] = "TRACKED";
                                 ssd=sd.getSubTable(f"FrontCam/Tag[{tag_id}]")
                                 ssd.putString("Status", "TRACKED")
-                                ssd.putNumberArray("Location", [int(center.x - nn_width / 2), int(center.y - nn_height / 2), int(tag_distance)])
+                                ssd.putNumberArray("DepthLocation", [int(center.x - nn_width / 2), int(center.y - nn_height / 2), int(tag_distance)])
+                                ssd.putNumberArray("Pose", [pose.translation().x, pose.translation().y, pose.translation().z, pose.rotation().x, pose.rotation().y, pose.rotation().z])
 
                         # Update Tag data in networktables
                         for i in range(len(tag_state)):
                             if tag_state[i] == "LOST" :
                                 ssd=sd.getSubTable(f"FrontCam/Tag[{i}]")
                                 ssd.putString("Status", "LOST")
-                                ssd.putNumberArray("Location", [0, 0, 0])
+                                ssd.putNumberArray("DepthLocation", [0, 0, 0])
+                                ssd.putNumberArray("Pose", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
                     cv2.putText(frame, "NN fps: {:.2f}".format(fps), (2, frame.shape[0] - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.3, color)
 
