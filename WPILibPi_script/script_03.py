@@ -317,8 +317,8 @@ if __name__ == "__main__":
                         tag_state = ["LOST" for i in range(10)]
                         for tag in apriltags:
 
-                            est = estimator.estimateOrthogonalIteration(tag, DETECTION_ITERATIONS)
-                            pose = est.pose1
+                            pose = estimator.estimate(tag, DETECTION_ITERATIONS)
+                            #pose = est.pose1
 
                             tag_id = tag.getId()
                             center = tag.getCenter()
