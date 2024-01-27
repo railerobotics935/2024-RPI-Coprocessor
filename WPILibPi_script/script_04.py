@@ -388,9 +388,9 @@ if __name__ == "__main__":
 
                         # Update Latency data in networktables
                         latency2 = dai.Clock.now() - inRgb.getTimestamp()
-#                        ssd=sd.getSubTable("FrontCam/Latency")
-#                        ssd.putNumber("Image", float(latency1))    TODO convert datetime.timedelta to msec
-#                        ssd.putNumber("Apriltag", float(latency2))
+                        ssd=sd.getSubTable("FrontCam/Latency")
+                        ssd.putNumber("Image", float(latency1.total_seconds()))
+                        ssd.putNumber("Apriltag", float(latency2.total_seconds()))
 
                     cv2.putText(frame, "NN fps: {:.2f}".format(fps), (2, frame.shape[0] - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.3, color)
 
