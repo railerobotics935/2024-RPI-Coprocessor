@@ -139,22 +139,18 @@ if __name__ == "__main__":
     if stereoDepth:
         xoutDepth = pipeline.create(dai.node.XLinkOut)
     xoutTracker = pipeline.create(dai.node.XLinkOut)
-#    xoutPreview = pipeline.create(dai.node.XLinkOut)        # this did not work on the RPi not enough bandwidth
     xoutGray = pipeline.create(dai.node.XLinkOut)
 
     xoutRgb.setStreamName("rgb")
     if stereoDepth:
         xoutDepth.setStreamName("depth")
     xoutTracker.setStreamName("tracklets")
-#    xoutPreview.setStreamName("preview")       # this did not work on the RPi not enough bandwidth
     xoutGray.setStreamName("gray")
        
     # Properties
     if wideFOV:
         camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_12_MP)
         camRgb.setInterleaved(False)
-#        camRgb.setIspScale(1,5) # 4056x3040 -> 812x608
-#        camRgb.setPreviewSize(812, 608)
         camRgb.setIspScale(1,4) # 4056x3040 -> 1014x760
         camRgb.setPreviewSize(1014, 760)
         camRgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)
@@ -227,8 +223,6 @@ if __name__ == "__main__":
     stereo.depth.link(detectionNetwork.inputDepth)
     detectionNetwork.passthroughDepth.link(xoutDepth.input)
     
-#    camRgb.preview.link(xoutPreview.input)     # This did NOT work on the RPi, not enough USB bandwidth for this higher res output stream
-    
     # Create the apriltag detector
     detector = robotpy_apriltag.AprilTagDetector()
     detector.addFamily("tag36h11")
@@ -239,7 +233,7 @@ if __name__ == "__main__":
         )
     )
     # Detect apriltag
-    DETECTION_MARGIN_THRESHOLD = 100
+    DETECTION_MARGIN_THRESHOLD = 50
     DETECTION_ITERATIONS = 50
 
     # Pipeline is now finished, and we need to find an available device to run our pipeline
@@ -249,10 +243,10 @@ if __name__ == "__main__":
         # From this point, the Device will be in "running" mode and will start sending data via XLink
 
         # Output queues will be used to get the rgb frames, tracklets data and depth frames from the outputs defined above
-        qRgb = device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
-        qTracklets = device.getOutputQueue(name="tracklets", maxSize=4, blocking=False)
-        qDepth = device.getOutputQueue(name="depth", maxSize=4, blocking=False)
-        qGray = device.getOutputQueue(name="gray", maxSize=4, blocking=False)
+        qRgb = device.getOutputQueue(name="rgb", maxSize=1, blocking=False)
+        qTracklets = device.getOutputQueue(name="tracklets", maxSize=8, blocking=False)
+        qDepth = device.getOutputQueue(name="depth", maxSize=1, blocking=False)
+        qGray = device.getOutputQueue(name="gray", maxSize=1, blocking=False)
 
         startTime = time.monotonic()
         counter = 0
@@ -261,30 +255,24 @@ if __name__ == "__main__":
         image_output_bandwidth_limit_counter = 0
 
         while True:
-            inRgb = qRgb.get()
-#            inRgb = qRgb.tryGet()
+#            inRgb = qRgb.get()
+            inRgb = qRgb.tryGet()
 #            track = qTracklets.get()
             track = qTracklets.tryGet()
             depth = qDepth.get()
-            inGray = qGray.get()
+            inGray = qGray.tryGet()
 
             if inRgb is not None:
+                latency1 = dai.Clock.now() - inRgb.getTimestamp()
+
                 frame = inRgb.getCvFrame()
                 depthFrame = depth.getFrame() # depthFrame values are in millimeters
-                gray = inGray.getCvFrame()
+                grayFrame = inGray.getFrame()
 
 #                print(f"{frame.shape[1]} : {frame.shape[0]}") # should be 416 x 416 (or nn_width x nn_height)
 #                print(f"{depthFrame.shape[1]} : {depthFrame.shape[0]}") # should be 640 x 400
 
                 if frame is not None:
-                    # Feed gray scale image into AprilTag library
-#                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-                    tag_info = detector.detect(gray)
-                    apriltags = [tag for tag in tag_info if tag.getDecisionMargin() > DETECTION_MARGIN_THRESHOLD]
-                    # Ignore any tags not in the set used on the 2024 FRC field:
-                    apriltags = [tag for tag in apriltags if ((tag.getId() >= 1) & (tag.getId() <= 16))]
-
                     counter+=1
                     current_time = time.monotonic()
                     if (current_time - startTime) > 1 :
@@ -323,10 +311,17 @@ if __name__ == "__main__":
                 #            sd.putNumber("Confidence", int(detection.confidence * 100))
                             ssd.putNumberArray("Location", [int(t.spatialCoordinates.x), int(t.spatialCoordinates.y), int(t.spatialCoordinates.z)])
 
+                    if grayFrame is not None:
+                        # Feed gray scale image into AprilTag library
+#                       gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                        tag_info = detector.detect(grayFrame)
+                        apriltags = [tag for tag in tag_info if tag.getDecisionMargin() > DETECTION_MARGIN_THRESHOLD]
+                        # Ignore any tags not in the set used on the 2024 FRC field:
+                        apriltags = [tag for tag in apriltags if ((tag.getId() >= 1) & (tag.getId() <= 16))]
+
                         tag_state = []
                         tag_state = ["LOST" for i in range(16)]
                         for tag in apriltags:
-
                             est = estimator.estimateOrthogonalIteration(tag, DETECTION_ITERATIONS)
                             pose = est.pose1
 
@@ -338,19 +333,18 @@ if __name__ == "__main__":
                             # Look up depth at center of Tag from the depth image
                             # depthFrame = 640 x 400
                             # rgbFrame = 416 x 416
-                            tag_to_depth_scale = 640 / float(c2g_width)
-                            tag_in_depth_x = int(center.x * tag_to_depth_scale)
-                            tag_in_depth_y = int(center.y * tag_to_depth_scale - (((c2g_height/2)*tag_to_depth_scale)-200))
-                            if tag_in_depth_x < 0 :
-                                tag_in_depth_x = 0
-                            if tag_in_depth_x > 639 :
-                                tag_in_depth_x = 639
-                            if tag_in_depth_y < 0 :
-                                tag_in_depth_y = 0
-                            if tag_in_depth_y > 399 :
-                                tag_in_depth_y = 399
-                                
-                            tag_distance = depthFrame[tag_in_depth_y,tag_in_depth_x]
+#                            tag_to_depth_scale = 640 / float(c2g_width)
+#                            tag_in_depth_x = int(center.x * tag_to_depth_scale)
+#                            tag_in_depth_y = int(center.y * tag_to_depth_scale - (((c2g_height/2)*tag_to_depth_scale)-200))
+#                            if tag_in_depth_x < 0 :
+#                                tag_in_depth_x = 0
+#                            if tag_in_depth_x > 639 :
+#                                tag_in_depth_x = 639
+#                            if tag_in_depth_y < 0 :
+#                                tag_in_depth_y = 0
+#                            if tag_in_depth_y > 399 :
+#                                tag_in_depth_y = 399
+#                            tag_distance = depthFrame[tag_in_depth_y,tag_in_depth_x]
 
 #                            print(f"{tag_id}: {center} , {tag_distance}")
 #                            print(f"{tag_id}: {pose}")
@@ -378,19 +372,25 @@ if __name__ == "__main__":
 
                             # Update Tag data in networktables
                             if ((tag_id >= 1) & (tag_id <= 16)):
-                                tag_state[tag_id] = "TRACKED";
+                                tag_state[tag_id-1] = "TRACKED";
                                 ssd=sd.getSubTable(f"FrontCam/Tag[{tag_id}]")
                                 ssd.putString("Status", "TRACKED")
-                                ssd.putNumberArray("Depth", [int(center.x - nn_width / 2), int(center.y - nn_height / 2), int(tag_distance)])
+#                                ssd.putNumberArray("Depth", [int(center.x - nn_width / 2), int(center.y - nn_height / 2), int(tag_distance)])
                                 ssd.putNumberArray("Pose", [pose.translation().x, pose.translation().y, pose.translation().z, pose.rotation().x, pose.rotation().y, pose.rotation().z])
 
                         # Update Tag data in networktables
-                        for i in range(len(tag_state)):
+                        for i in range(16):
                             if tag_state[i] == "LOST" :
-                                ssd=sd.getSubTable(f"FrontCam/Tag[{i}]")
+                                ssd=sd.getSubTable(f"FrontCam/Tag[{i+1}]")
                                 ssd.putString("Status", "LOST")
-                                ssd.putNumberArray("Depth", [0, 0, 0])
+#                                ssd.putNumberArray("Depth", [0, 0, 0])
                                 ssd.putNumberArray("Pose", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+                        # Update Latency data in networktables
+                        latency2 = dai.Clock.now() - inRgb.getTimestamp()
+#                        ssd=sd.getSubTable("FrontCam/Latency")
+#                        ssd.putNumber("Image", float(latency1))    TODO convert datetime.timedelta to msec
+#                        ssd.putNumber("Apriltag", float(latency2))
 
                     cv2.putText(frame, "NN fps: {:.2f}".format(fps), (2, frame.shape[0] - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.3, color)
 
@@ -409,6 +409,9 @@ if __name__ == "__main__":
                             depthFrameColor = cv2.equalizeHist(depthFrameColor)
                             depthFrameColor = cv2.applyColorMap(depthFrameColor, cv2.COLORMAP_HOT)
                             output_stream_depth.putFrame(depthFrameColor)
+
+                # print performance metrics
+                print(f"{latency1}; {latency2}")
 
             if cv2.waitKey(1) == ord('q'):
                 break
