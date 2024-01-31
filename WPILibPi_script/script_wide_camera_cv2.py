@@ -18,6 +18,7 @@
 # TODO: Add DepthAI camera object
 #
 
+# test to use cv2 instead of samera server to 
 
 # This will be used to set up the pi (Read the config file)
 # =============================================
@@ -122,19 +123,7 @@ if __name__ == "__main__":
     width = 1280
     height = 800
 
-    # Create a CameraServer for ShuffleBoard visualization
-    CameraServer.enableLogging()
-#    camera = CameraServer.startAutomaticCapture()
-#    cs.enableLogging()
-
-    # Width and Height have to match output frame
-    output_stream = CameraServer.putVideo("Aprilcam", 320, 200)
-
-    usbCamera = CameraServer.startAutomaticCapture()
-    usbCamera.setResolution(width, height)
-    img = np.zeros(shape=(width, height, 1), dtype=np.uint8)
-
-    input_stream = CameraServer.getVideo()
+    input = cv2.VideoCapture(0)
 
     # Create the apriltag detector
     detector = robotpy_apriltag.AprilTagDetector()
@@ -167,8 +156,9 @@ if __name__ == "__main__":
     image_output_bandwidth_limit_counter = 0
 
     while True:
-        inputImageTime, input_img = input_stream.grabFrame(img)
-
+        test, frame = input.read()
+        frame = np.uint8(frame)
+        print(frame)
         counter+=1
         current_time = time.monotonic()
         if (current_time - startTime) > 1 :
@@ -176,18 +166,15 @@ if __name__ == "__main__":
             counter = 0
             startTime = current_time
 
-        # Create color frame for Shuffleboard display
-        #outFrame = cv2.cvtColor(input_img, cv2.COLOR_GRAY2HSV)
-        outFrame = input_img
-
         # Feed gray scale image into AprilTag library
-        tag_info = detector.detect(outFrame)
+        tag_info = None # detector.detect(frame)
         if tag_info is not None:
             apriltags = [tag for tag in tag_info if tag.getDecisionMargin() > DETECTION_MARGIN_THRESHOLD]
             # Ignore any tags not in the set used on the 2024 FRC field:
     #                        apriltags = [tag for tag in apriltags if ((tag.getId() >= 1) & (tag.getId() <= 16))]
         else:
-            print("no Tag info")
+            pass
+            #print("no Tag info")
         tag_state = []
         tag_state = ["LOST" for i in range(16)]
         for tag in apriltags:
@@ -212,13 +199,13 @@ if __name__ == "__main__":
             corner1 = (int(tag.getCorner(1).x), int(tag.getCorner(1).y))
             corner2 = (int(tag.getCorner(2).x), int(tag.getCorner(2).y))
             corner3 = (int(tag.getCorner(3).x), int(tag.getCorner(3).y))
-            cv2.line(outFrame, corner0, corner1, color = col_box, thickness = 1)
-            cv2.line(outFrame, corner1, corner2, color = col_box, thickness = 1)
-            cv2.line(outFrame, corner2, corner3, color = col_box, thickness = 1)
-            cv2.line(outFrame, corner3, corner0, color = col_box, thickness = 1)
+            cv2.line(frame, corner0, corner1, color = col_box, thickness = 1)
+            cv2.line(frame, corner1, corner2, color = col_box, thickness = 1)
+            cv2.line(frame, corner2, corner3, color = col_box, thickness = 1)
+            cv2.line(frame, corner3, corner0, color = col_box, thickness = 1)
 
             # Label the tag with the ID:
-            cv2.putText(outFrame, f"{tag_id}", (int(center.x), int(center.y)), cv2.FONT_HERSHEY_SIMPLEX, 1, col_txt, 2)
+            cv2.putText(frame, f"{tag_id}", (int(center.x), int(center.y)), cv2.FONT_HERSHEY_SIMPLEX, 1, col_txt, 2)
 
             # Update Tag data in networktables
             if ((tag_id >= 1) & (tag_id <= 16)):
@@ -239,19 +226,10 @@ if __name__ == "__main__":
         #ssd=sd.getSubTable("FrontCam/Latency")
         #ssd.putNumber("Apriltag", float(latency2))
 
-        cv2.putText(outFrame, "NN fps: {:.2f}".format(fps), (2, outFrame.shape[0] - 4), cv2.FONT_HERSHEY_SIMPLEX, 1.0, color)
-
-        # After all the drawing is finished, we show the frame on the screen
-        # we can't do that on a headless RPi....           cv2.imshow("preview", frame)
-        # Instead publish to CameraServer output stream for NetworkTables or MJPEG http stream\
-        # ... and lower the refresh rate to comply with FRC robot wireless bandwidth regulations
-        image_output_bandwidth_limit_counter += 1
-        if image_output_bandwidth_limit_counter > 1:
-            image_output_bandwidth_limit_counter = 0
-            output_stream.putFrame(outFrame)
-
-    # print performance metrics
-#                print(f"{latency1}; {latency2}")
+        cv2.putText(frame, "NN fps: {:.2f}".format(fps), (2, frame.shape[0] - 4), cv2.FONT_HERSHEY_SIMPLEX, 1.0, color)
 
         if cv2.waitKey(1) == ord('q'):
             break
+    
+    # After the loop release the cap object
+    input.release()
