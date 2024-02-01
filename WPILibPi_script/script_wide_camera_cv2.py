@@ -123,7 +123,10 @@ if __name__ == "__main__":
     width = 1280
     height = 800
 
-    input = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(0)
+
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
     # Create the apriltag detector
     detector = robotpy_apriltag.AprilTagDetector()
@@ -132,17 +135,17 @@ if __name__ == "__main__":
 #    detector.Config.debug = True                                # writes images to current working directory? did not work
 #    detector.Config.decodeSharpening = 0.5                      # default is 0.25
 #    detector.Config.numThreads = 1                              # default is 1
-    #detector.Config.quadDecimate = 1.0                          # default is 2.0
-    #detector.Config.quadSigma = 0.5                             # default is 0.0
+    detector.Config.quadDecimate = 1.0                          # default is 2.0
+    detector.Config.quadSigma = 0.5                             # default is 0.0
 #    detector.QuadThresholdParameters.criticalAngle = 0.0        # default is 10 degrees, unit in radians
-    #detector.QuadThresholdParameters.maxLineFitMSE = 30.0       # default is 10.0
-    #detector.QuadThresholdParameters.maxNumMaxima = 5           # default is 10     This made the biggest difference
-    #detector.QuadThresholdParameters.minClusterPixels = 3       # default is 5
+    detector.QuadThresholdParameters.maxLineFitMSE = 30.0       # default is 10.0
+    detector.QuadThresholdParameters.maxNumMaxima = 5           # default is 10     This made the biggest difference
+    detector.QuadThresholdParameters.minClusterPixels = 3       # default is 5
     #detector.QuadThresholdParameters.minWhiteBlackDiff = 0      # default is 5
 
     estimator = robotpy_apriltag.AprilTagPoseEstimator(
         robotpy_apriltag.AprilTagPoseEstimator.Config(
-            0.165, 450, 450, width / 2.0, height / 2.0
+            0.165, 780, 780, width / 2.0, height / 2.0
         )
     )
     # Detect apriltag
@@ -156,9 +159,9 @@ if __name__ == "__main__":
     image_output_bandwidth_limit_counter = 0
 
     while True:
-        test, frame = input.read()
-        frame = np.uint8(frame)
-        print(frame)
+        test, frame = cap.read()
+        gray=cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
         counter+=1
         current_time = time.monotonic()
         if (current_time - startTime) > 1 :
@@ -167,17 +170,16 @@ if __name__ == "__main__":
             startTime = current_time
 
         # Feed gray scale image into AprilTag library
-        tag_info = None # detector.detect(frame)
-        if tag_info is not None:
-            apriltags = [tag for tag in tag_info if tag.getDecisionMargin() > DETECTION_MARGIN_THRESHOLD]
-            # Ignore any tags not in the set used on the 2024 FRC field:
-    #                        apriltags = [tag for tag in apriltags if ((tag.getId() >= 1) & (tag.getId() <= 16))]
-        else:
-            pass
-            #print("no Tag info")
+        tag_info = detector.detect(gray)
+        filter_tags = [tag for tag in tag_info if tag.getDecisionMargin() > DETECTION_MARGIN_THRESHOLD]
+
+        # OPTIONAL: Ignore any tags not in the set used on the 2024 FRC field:
+        #filter_tags = [tag for tag in filter_tags if ((tag.getId() > 0) & (tag.getId() < 9))]
+
         tag_state = []
         tag_state = ["LOST" for i in range(16)]
-        for tag in apriltags:
+        for tag in filter_tags:
+
             est = estimator.estimateOrthogonalIteration(tag, DETECTION_ITERATIONS)
             pose = est.pose1
 
