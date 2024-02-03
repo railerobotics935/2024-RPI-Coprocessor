@@ -26,6 +26,7 @@
 from pathlib import Path
 from cscore import CameraServer
 from ntcore import NetworkTableInstance
+from ntcore import NetworkTable
 
 #for DepthAI processing
 import json
@@ -160,6 +161,7 @@ if __name__ == "__main__":
 
     while True:
         test, frame = cap.read()
+        inputImageTime = time.monotonic()
         gray=cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         counter+=1
@@ -211,7 +213,7 @@ if __name__ == "__main__":
 
             # Update Tag data in networktables
             if ((tag_id >= 1) & (tag_id <= 16)):
-                tag_state[tag_id-1] = "TRACKED";
+                tag_state[tag_id-1] = "TRACKED"
                 ssd=sd.getSubTable(f"FrontCam/Tag[{tag_id}]")
                 ssd.putString("Status", "TRACKED")
                 ssd.putNumberArray("Pose", [pose.translation().x, pose.translation().y, pose.translation().z, pose.rotation().x, pose.rotation().y, pose.rotation().z])
@@ -224,10 +226,9 @@ if __name__ == "__main__":
                 ssd.putNumberArray("Pose", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
         # Update Latency data in networktables
-        #latency2 = time.monotonic() - inputImageTime
-        #ssd=sd.getSubTable("FrontCam/Latency")
-        #ssd.putNumber("Apriltag", float(latency2))
-
+        latency2 = time.monotonic() - inputImageTime
+        ssd=sd.getSubTable("FrontCam/Latency")
+        ssd.putNumber("Apriltag", float(latency2))
         cv2.putText(frame, "NN fps: {:.2f}".format(fps), (2, frame.shape[0] - 4), cv2.FONT_HERSHEY_SIMPLEX, 1.0, color)
 
         if cv2.waitKey(1) == ord('q'):
