@@ -155,8 +155,8 @@ if __name__ == "__main__":
 
     cap1 = cv2.VideoCapture(0)
     cap2 = cv2.VideoCapture(2)
-    print(f"{cap1}")
-    print(f"{cap2}")
+#    print(f"{cap1}")
+#    print(f"{cap2}")
 
     cap1.set(cv2.CAP_PROP_FRAME_WIDTH, width)
     cap1.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
@@ -181,7 +181,7 @@ if __name__ == "__main__":
 
     estimator = robotpy_apriltag.AprilTagPoseEstimator(
         robotpy_apriltag.AprilTagPoseEstimator.Config(
-            0.165, 780, 780, width / 2.0, height / 2.0
+            0.165, 730, 730, width / 2.0, height / 2.0
         )
     )
     
@@ -190,7 +190,6 @@ if __name__ == "__main__":
     DETECTION_ITERATIONS = 50
 
     while True:
-
         processApriltags(cap1, cam1Name)
         processApriltags(cap2, cam2Name)
 
@@ -198,4 +197,6 @@ if __name__ == "__main__":
             break
     
     # After the loop release the cap object
-    input.release()
+    cap1.release()
+    cap2.release()
+    
