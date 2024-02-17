@@ -4,7 +4,7 @@
 # and: https://docs.luxonis.com/projects/api/en/latest/samples/ObjectTracker/spatial_object_tracker/#spatial-object-tracker-on-rgb
 # updated to work on FRC 2024 WPILibPi image and to be uploaded as a vision application
 # communicating with shuffleboard and RoboRIO through NetworkTables and CameraServer
-# Jaap van Bergeijk, 2024
+# Jaap van Bergeijk, 2024-02-17
 
 # Uses OAK-D Lite Color Camera with on camera ISP + Manipulator to size the image down 1/4 and convert to GRAY8
 # - reduces USB data transfer time
@@ -108,37 +108,44 @@ if __name__ == "__main__":
 #    camera = CameraServer.startAutomaticCapture()
 #    cs.enableLogging()
 
-    # Width and Height have to match Neural Network settings: 320x320 pixels
+    # Preset the Width and Height to image size used for streaming to Shuffleboard
     output_stream_nn = CameraServer.putVideo("FrontNN", gray_width, gray_height)
 
     # Pipeline tells DepthAI what operations to perform when running - you define all of the resources used and flows here
     pipeline = dai.Pipeline()
 
-    # First, we want the Color camera as the output
+    # Create all nodes, we want the Color camera as the output, we need an image manipulator and a gray image output
     camRgb = pipeline.create(dai.node.ColorCamera)
     manipC2G = pipeline.create(dai.node.ImageManip)
     xoutGray = pipeline.create(dai.node.XLinkOut)
 
-    xoutGray.setStreamName("gray")
-       
-    # Properties
+    # Set Properties of all nodes
     camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_12_MP)
     camRgb.setInterleaved(False)
     camRgb.setIspScale(isp_num, isp_den)
     camRgb.setPreviewSize(gray_width, gray_height)
-#    camRgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)
     camRgb.setFps(20)
-
     manipC2G.initialConfig.setFrameType(dai.ImgFrame.Type.GRAY8)
-
-    # Linking
+    xoutGray.setStreamName("gray")
+       
+    # Linking of the nodes
     camRgb.preview.link(manipC2G.inputImage)
     manipC2G.out.link(xoutGray.input)
 
     # Create the apriltag detector
     detector = robotpy_apriltag.AprilTagDetector()
     detector.addFamily("tag36h11")
-#    detector.Config.quadDecimate = 1
+    # see https://robotpy.readthedocs.io/projects/robotpy/en/stable/robotpy_apriltag/AprilTagDetector.html
+#    detector.Config.debug = True                                # writes images to current working directory? did not work
+#    detector.Config.decodeSharpening = 0.5                      # default is 0.25
+#    detector.Config.numThreads = 1                              # default is 1
+    detector.Config.quadDecimate = 1.0                          # default is 2.0
+    detector.Config.quadSigma = 0.5                             # default is 0.0
+#    detector.QuadThresholdParameters.criticalAngle = 0.0        # default is 10 degrees, unit in radians
+    detector.QuadThresholdParameters.maxLineFitMSE = 30.0       # default is 10.0
+    detector.QuadThresholdParameters.maxNumMaxima = 5           # default is 10     This made the biggest difference
+    detector.QuadThresholdParameters.minClusterPixels = 3       # default is 5
+    #detector.QuadThresholdParameters.minWhiteBlackDiff = 0      # default is 5
     estimator = robotpy_apriltag.AprilTagPoseEstimator(
         robotpy_apriltag.AprilTagPoseEstimator.Config(
             0.165, 780, 780, gray_width / 2.0, gray_height / 2.0
@@ -150,7 +157,6 @@ if __name__ == "__main__":
 
     # Pipeline is now finished, and we need to find an available device to run our pipeline
     # we are using context manager here that will dispose the device after we stop using it
-    #with dai.Device(pipeline, True) as device:
 #    with dai.Device(pipeline, usb2Mode=True) as device:
     with dai.Device(pipeline) as device:
         # From this point, the Device will be in "running" mode and will start sending data via XLink
@@ -172,9 +178,6 @@ if __name__ == "__main__":
 
 #                frame = inRgb.getCvFrame()
                 grayFrame = inGray.getFrame()
-
-#                print(f"{frame.shape[1]} : {frame.shape[0]}") # should be 416 x 416 (or nn_width x nn_height)
-#                print(f"{depthFrame.shape[1]} : {depthFrame.shape[0]}") # should be 640 x 400
 
                 if grayFrame is not None:
                     counter+=1

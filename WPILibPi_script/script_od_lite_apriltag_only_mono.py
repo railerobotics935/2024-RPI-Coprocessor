@@ -4,7 +4,7 @@
 # and: https://docs.luxonis.com/projects/api/en/latest/samples/ObjectTracker/spatial_object_tracker/#spatial-object-tracker-on-rgb
 # updated to work on FRC 2024 WPILibPi image and to be uploaded as a vision application
 # communicating with shuffleboard and RoboRIO through NetworkTables and CameraServer
-# Jaap van Bergeijk, 2024
+# Jaap van Bergeijk, 2024-02-17
 
 # Uses OAK-D Lite Left Mono Camera
 # - low USB data transfer time, smaller image: 640x400 pixels
@@ -106,24 +106,23 @@ if __name__ == "__main__":
 #    camera = CameraServer.startAutomaticCapture()
 #    cs.enableLogging()
 
-    # Width and Height have to match output frame
+    # Preset the Width and Height to image size used for streaming to Shuffleboard
     output_stream_nn = CameraServer.putVideo("FrontNN", gray_width, gray_height)
 
     # Pipeline tells DepthAI what operations to perform when running - you define all of the resources used and flows here
     pipeline = dai.Pipeline()
 
-    # First, we want the Color camera as the output
+    # Create all nodes, we want the left Mono camera as the output and we need a gray image output
     monoLeft = pipeline.create(dai.node.MonoCamera)
     xoutGray = pipeline.create(dai.node.XLinkOut)
 
-    xoutGray.setStreamName("gray")
-       
-    # Properties
+    # Set Properties of all nodes
     monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
     monoLeft.setBoardSocket(dai.CameraBoardSocket.CAM_B)
     monoLeft.setFps(20)
-
-    # Linking
+    xoutGray.setStreamName("gray")
+       
+    # Linking of the nodes
     monoLeft.out.link(xoutGray.input)
 
     # Create the apriltag detector
@@ -151,7 +150,6 @@ if __name__ == "__main__":
 
     # Pipeline is now finished, and we need to find an available device to run our pipeline
     # we are using context manager here that will dispose the device after we stop using it
-#    with dai.Device(pipeline, usb2Mode=True) as device:
     with dai.Device(pipeline) as device:
         # From this point, the Device will be in "running" mode and will start sending data via XLink
 

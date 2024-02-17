@@ -4,7 +4,7 @@
 # and: https://docs.luxonis.com/projects/api/en/latest/samples/ObjectTracker/spatial_object_tracker/#spatial-object-tracker-on-rgb
 # updated to work on FRC 2024 WPILibPi image and to be uploaded as a vision application
 # communicating with shuffleboard and RoboRIO through NetworkTables and CameraServer
-# Jaap van Bergeijk, 2024
+# Jaap van Bergeijk, 2024-02-17
 
 # Uses OAK-D S2 Left Mono Camera
 # - higher USB data transfer time, larger image: 1280x800 pixels
@@ -106,31 +106,39 @@ if __name__ == "__main__":
 #    camera = CameraServer.startAutomaticCapture()
 #    cs.enableLogging()
 
-    # Width and Height have to match output frame
+    # Preset the Width and Height to image size used for streaming to Shuffleboard
     output_stream_nn = CameraServer.putVideo("FrontNN", gray_width, gray_height)
 
     # Pipeline tells DepthAI what operations to perform when running - you define all of the resources used and flows here
     pipeline = dai.Pipeline()
 
-    # First, we want the Color camera as the output
+    # Create all nodes, we want the left Mono camera as the output and we need a gray image output
     monoLeft = pipeline.create(dai.node.MonoCamera)
     xoutGray = pipeline.create(dai.node.XLinkOut)
 
-    xoutGray.setStreamName("gray")
-       
-    # Properties
+    # Set Properties of all nodes
     monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
     monoLeft.setBoardSocket(dai.CameraBoardSocket.CAM_B)
     monoLeft.setFps(20)
+    xoutGray.setStreamName("gray")
 
-    # Linking
+    # Linking of the nodes
     monoLeft.out.link(xoutGray.input)
 
     # Create the apriltag detector
     detector = robotpy_apriltag.AprilTagDetector()
     detector.addFamily("tag36h11")
-#    detector.Config.quadDecimate = 1
-    detector.Config.quadDecimate = 1
+    # see https://robotpy.readthedocs.io/projects/robotpy/en/stable/robotpy_apriltag/AprilTagDetector.html
+#    detector.Config.debug = True                                # writes images to current working directory? did not work
+#    detector.Config.decodeSharpening = 0.5                      # default is 0.25
+#    detector.Config.numThreads = 1                              # default is 1
+    detector.Config.quadDecimate = 1.0                          # default is 2.0
+    detector.Config.quadSigma = 0.5                             # default is 0.0
+#    detector.QuadThresholdParameters.criticalAngle = 0.0        # default is 10 degrees, unit in radians
+    detector.QuadThresholdParameters.maxLineFitMSE = 30.0       # default is 10.0
+    detector.QuadThresholdParameters.maxNumMaxima = 5           # default is 10     This made the biggest difference
+    detector.QuadThresholdParameters.minClusterPixels = 3       # default is 5
+    detector.QuadThresholdParameters.minWhiteBlackDiff = 0      # default is 5
     estimator = robotpy_apriltag.AprilTagPoseEstimator(
         robotpy_apriltag.AprilTagPoseEstimator.Config(
             0.165, 480, 480, gray_width / 2.0, gray_height / 2.0
@@ -142,8 +150,6 @@ if __name__ == "__main__":
 
     # Pipeline is now finished, and we need to find an available device to run our pipeline
     # we are using context manager here that will dispose the device after we stop using it
-    #with dai.Device(pipeline, True) as device:
-#    with dai.Device(pipeline, usb2Mode=True) as device:
     with dai.Device(pipeline) as device:
         # From this point, the Device will be in "running" mode and will start sending data via XLink
 
