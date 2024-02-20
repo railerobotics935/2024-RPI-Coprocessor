@@ -374,6 +374,7 @@ def processODLiteObjects(qRgb, qTracklets, image_output_bandwidth_limit_counter,
 
     inRgb = qRgb.tryGet()
     track = qTracklets.tryGet()
+    color = (255, 255, 255)
 
     if inRgb is not None:
         latency1 = dai.Clock.now() - inRgb.getTimestamp()
