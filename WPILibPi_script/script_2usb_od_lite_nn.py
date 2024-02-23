@@ -411,15 +411,15 @@ def processODLiteObjects(qRgb, qTracklets, image_output_bandwidth_limit_counter,
                     cv2.putText(frame, t.status.name, (x1 + 10, y1 + 50), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, cv2.FONT_HERSHEY_SIMPLEX)
 
-                    cv2.putText(frame, f"X: {int(t.spatialCoordinates.x)} mm", (x1 + 10, y1 + 65), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
-                    cv2.putText(frame, f"Y: {int(-t.spatialCoordinates.y)} mm", (x1 + 10, y1 + 80), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
-                    cv2.putText(frame, f"Z: {int(t.spatialCoordinates.z)} mm", (x1 + 10, y1 + 95), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
+                    cv2.putText(frame, "X: {:.3f} m".format(float(t.spatialCoordinates.x)*0.001), (x1 + 10, y1 + 65), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
+                    cv2.putText(frame, "Y: {:.3f} m".format(float(-t.spatialCoordinates.y)*0.001), (x1 + 10, y1 + 80), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
+                    cv2.putText(frame, "Z: {:.3f} m".format(float(t.spatialCoordinates.z)*0.001), (x1 + 10, y1 + 95), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
 
                     ssd=sd.getSubTable(f"ObjectCam/Object[{t.id}]")
                     ssd.putString("Label", str(label))
                     ssd.putString("Status", t.status.name)
         #            sd.putNumber("Confidence", int(detection.confidence * 100))
-                    ssd.putNumberArray("Location", [int(t.spatialCoordinates.x), int(-t.spatialCoordinates.y), int(t.spatialCoordinates.z)])
+                    ssd.putNumberArray("Pose", [float(t.spatialCoordinates.x)*0.001, float(-t.spatialCoordinates.y)*0.001, float(t.spatialCoordinates.z)*0.001])
 
             # Update Latency data in networktables
             latency2 = dai.Clock.now() - inRgb.getTimestamp()
