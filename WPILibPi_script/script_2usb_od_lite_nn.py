@@ -2,7 +2,7 @@
 # Team 935
 #
 # - Uses 2 USB connected OV9282 cameras for AprilTag detection: front & back cams
-# - Uses 1 OAK-D Lite camera for Note detection: "ObjectsCam"
+# - Uses 1 OAK-D Lite camera for Note detection: "ObjectCam"
 #
 # Questions
 # How to identify the different camera ids
@@ -252,7 +252,7 @@ def configureODLiteAprilTagDetectionPipeline():
 # =============================================================================
 # initialize the OAK-D Lite neural network processing pipeline
 def configureODLiteObjectDetectionPipeline():
-     
+
     # Label texts
     labelMap = ["robot", "note"]
     syncNN = True
@@ -412,14 +412,14 @@ def processODLiteObjects(qRgb, qTracklets, image_output_bandwidth_limit_counter,
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, cv2.FONT_HERSHEY_SIMPLEX)
 
                     cv2.putText(frame, f"X: {int(t.spatialCoordinates.x)} mm", (x1 + 10, y1 + 65), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
-                    cv2.putText(frame, f"Y: {int(t.spatialCoordinates.y)} mm", (x1 + 10, y1 + 80), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
+                    cv2.putText(frame, f"Y: {int(-t.spatialCoordinates.y)} mm", (x1 + 10, y1 + 80), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
                     cv2.putText(frame, f"Z: {int(t.spatialCoordinates.z)} mm", (x1 + 10, y1 + 95), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
 
                     ssd=sd.getSubTable(f"ObjectCam/Object[{t.id}]")
                     ssd.putString("Label", str(label))
                     ssd.putString("Status", t.status.name)
         #            sd.putNumber("Confidence", int(detection.confidence * 100))
-                    ssd.putNumberArray("Location", [int(t.spatialCoordinates.x), int(t.spatialCoordinates.y), int(t.spatialCoordinates.z)])
+                    ssd.putNumberArray("Location", [int(t.spatialCoordinates.x), int(-t.spatialCoordinates.y), int(t.spatialCoordinates.z)])
 
             # Update Latency data in networktables
             latency2 = dai.Clock.now() - inRgb.getTimestamp()
