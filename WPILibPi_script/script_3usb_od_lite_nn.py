@@ -35,6 +35,9 @@ configFile = "/boot/frc.json"
 team = 935
 server = False
 
+DETECTION_MARGIN_THRESHOLD = 50
+DETECTION_ITERATIONS = 50
+
 cam1Name = "FrontCam"
 cam2Name = "BackLeftCam"
 cam3Name = "BackRightCam"
@@ -445,6 +448,8 @@ def processODLiteObjects(qRgb, qTracklets, image_output_bandwidth_limit_counter,
 # =============================================================================
 # main application entry point
 if __name__ == "__main__":
+    time.sleep(5) # to make sure the rio is good
+
     if len(sys.argv) >= 2:
         configFile = sys.argv[1]
 
@@ -483,30 +488,30 @@ if __name__ == "__main__":
     detector, ov9282Estimator = configureAprilTagDetection()
 
     # DepthAI OAK-D Lite initialization
-    pipeline, output_stream_nn = configureODLiteObjectDetectionPipeline()
+    #pipeline, output_stream_nn = configureODLiteObjectDetectionPipeline()
 
     # Pipeline is now finished, and we need to find an available device to run our pipeline
     # we are using context manager here that will dispose the device after we stop using it
-    with dai.Device(pipeline) as device:
-        # From this point, the Device will be in "running" mode and will start sending data via XLink
-        image_output_bandwidth_limit_counter = 0
+    #with dai.Device(pipeline) as device:
+    # From this point, the Device will be in "running" mode and will start sending data via XLink
+    image_output_bandwidth_limit_counter = 0
 
-        # Output queues will be used to get the gray frames
+    # Output queues will be used to get the gray frames
 #        qGray = device.getOutputQueue(name="gray", maxSize=1, blocking=False)
 
-        # Output queues will be used to get the rgb frames, tracklets data and depth frames from the outputs defined above
-        qRgb = device.getOutputQueue(name="rgb", maxSize=1, blocking=False)
-        qTracklets = device.getOutputQueue(name="tracklets", maxSize=4, blocking=False)
+    # Output queues will be used to get the rgb frames, tracklets data and depth frames from the outputs defined above
+    #qRgb = device.getOutputQueue(name="rgb", maxSize=1, blocking=False)
+    #qTracklets = device.getOutputQueue(name="tracklets", maxSize=4, blocking=False)
 
-        while True:
-            processOV9282Apriltags(cap1, cam1Name, detector, ov9282Estimator)
-            processOV9282Apriltags(cap2, cam2Name, detector, ov9282Estimator)
-            processOV9282Apriltags(cap3, cam3Name, detector, ov9282Estimator)
+    while True:
+        processOV9282Apriltags(cap1, cam1Name, detector, ov9282Estimator)
+        processOV9282Apriltags(cap2, cam2Name, detector, ov9282Estimator)
+        processOV9282Apriltags(cap3, cam3Name, detector, ov9282Estimator)
 #            processODLiteApriltags(qGray, cam4Name, odliteEstimator)
-            image_output_bandwidth_limit_counter = processODLiteObjects(qRgb, qTracklets, image_output_bandwidth_limit_counter, output_stream_nn)
+        #image_output_bandwidth_limit_counter = processODLiteObjects(qRgb, qTracklets, image_output_bandwidth_limit_counter, output_stream_nn)
 
-            if cv2.waitKey(1) == ord('q'):
-                break
+        if cv2.waitKey(1) == ord('q'):
+            break
     
     # After the loop release the cap object
     cap1.release()

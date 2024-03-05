@@ -1,8 +1,6 @@
 # Script based off of the depthAI versions for solely the mono wide camera (non depthAI)
 # Team 935
 #
-# With Guidence
-#
 # If time
 # TODO: Add DepthAI camera object
 #
