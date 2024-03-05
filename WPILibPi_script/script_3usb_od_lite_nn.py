@@ -168,8 +168,20 @@ def processOV9282Apriltags(cap, nt_name, detector, estimator):
 #        print("processing has data " + nt_name)
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         processApriltags(gray, nt_name, detector, estimator)
-#    else
-#        print("processing has NO data " + nt_name)
+    else
+#       print("processing has NO data " + nt_name)
+        # Set data to lost and zero
+        tag_state = []
+        tag_state = ["LOST" for i in range(16)]
+
+        # Update Tag data in networktables
+        for i in range(16):
+            if tag_state[i] == "LOST" :
+                ssd=sd.getSubTable(nt_name + f"/Tag[{i+1}]")
+                ssd.putString("Status", "LOST")
+                ssd.putNumberArray("Pose", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+
 
     # Update Latency data in networktables
     latency2 = time.monotonic() - inputImageTime
