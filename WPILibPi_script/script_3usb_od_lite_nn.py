@@ -179,7 +179,7 @@ def processOV9282Apriltags(cap, nt_name, detector, estimator):
         for i in range(16):
             if tag_state[i] == "LOST" :
                 ssd=sd.getSubTable(nt_name + f"/Tag[{i+1}]")
-                if ssd.getString("TRACKED") != "LOST" :
+                if ssd.getString("Status", "TRACKED") != "LOST" :
                     ssd.putString("Status", "LOST")
                     ssd.putNumberArray("Pose", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
