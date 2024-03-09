@@ -170,6 +170,8 @@ def processOV9282Apriltags(cap, nt_name, detector, estimator):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         processApriltags(gray, nt_name, detector, estimator)
     else:
+        # this detects a camera malfunction, only reset tag state to
+        # "LOST" when this state is reached for longer than the image update rate
 #       print("processing has NO data " + nt_name)
         # Set data to lost and zero
         tag_state = []
@@ -183,12 +185,11 @@ def processOV9282Apriltags(cap, nt_name, detector, estimator):
                     ssd.putString("Status", "LOST")
                     ssd.putNumberArray("Pose", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
-
     # Update Latency data in networktables
     latency2 = time.monotonic() - inputImageTime
     ssd=sd.getSubTable(nt_name + "/Latency")
     ssd.putNumber("Apriltag", float(latency2))
-    ntinst.flush()
+#    ntinst.flush()   disabled here, flush all 3 cams at the end of a data processing cycle
 
 
 # =============================================================================
@@ -209,7 +210,7 @@ def processODLiteApriltags(qCam, nt_name, estimator):
     latency2 = dai.Clock.now() - inGray.getTimestamp()
     ssd=sd.getSubTable(nt_name + "/Latency")
     ssd.putNumber("Apriltag", float(latency2.total_seconds()))
-    ntinst.flush()
+#    ntinst.flush()
 
 
 # =============================================================================
@@ -516,6 +517,14 @@ if __name__ == "__main__":
     #qRgb = device.getOutputQueue(name="rgb", maxSize=1, blocking=False)
     #qTracklets = device.getOutputQueue(name="tracklets", maxSize=4, blocking=False)
 
+    # fps calculation
+    fps = 0
+    fps_counter = 0
+    fps_reference_time = time.monotonic()
+
+    # network tables flush pacing
+    nt_last_flush_timestamp = time.monotonic() - 0.1
+
     while True:
         processOV9282Apriltags(cap1, cam1Name, detector, ov9282Estimator)
         processOV9282Apriltags(cap2, cam2Name, detector, ov9282Estimator)
@@ -523,8 +532,25 @@ if __name__ == "__main__":
 #            processODLiteApriltags(qGray, cam4Name, odliteEstimator)
         #image_output_bandwidth_limit_counter = processODLiteObjects(qRgb, qTracklets, image_output_bandwidth_limit_counter, output_stream_nn)
 
-        if cv2.waitKey(1) == ord('q'):
-            break
+        fps_counter = fps_counter + 1
+        fps_timestamp = time.monotonic()
+        if (fps_timestamp - fps_reference_time) >= 1.0 :
+            fps_reference_time = fps_timestamp
+            fps = fps_counter
+            fps_counter = 0
+            ssd=sd.getSubTable("FrontCam")
+            ssd.putNumber("FPS", float(fps))
+
+        # flush all camera data at the end of a data processing cycle
+        # minimum interval between flush commands is: 10 ms
+        nt_flush_timestamp = time.monotonic()
+        if (nt_flush_timestamp - nt_last_flush_timestamp) >= 0.01 :
+            ntinst.flush()
+            nt_last_flush_timestamp = nt_flush_timestamp
+
+#        disable this check, useless on RPi coprocessor
+#        if cv2.waitKey(1) == ord('q'):
+#            break
     
     # After the loop release the cap object
     cap1.release()
