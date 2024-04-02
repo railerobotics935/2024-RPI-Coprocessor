@@ -1,13 +1,7 @@
 # Script based off of the depthAI versions for solely the mono wide camera (non depthAI)
 # Team 935
-#
-# - Uses 2 USB connected OV9282 cameras for AprilTag detection: front & back cams
-# - Uses 1 OAK-D Lite camera for Note detection: "ObjectCam"
-#
-# Questions
-# How to identify the different camera ids
-#
-# test to use cv2 instead of camera server to 
+
+# Calculates the 2d translation of the note based off of object size and position of the object
 
 # This will be used to set up the pi (Read the config file)
 # =============================================
@@ -34,6 +28,13 @@ import math
 configFile = "/boot/frc.json"
 team = 935
 server = False
+
+# Label texts
+labelMap = ["robot", "note"]
+syncNN = True
+wideFOV = True
+stereoDepth = True
+
 
 DETECTION_MARGIN_THRESHOLD = 50
 DETECTION_ITERATIONS = 50
@@ -94,7 +95,7 @@ def readConfig():
     return True
 
 
-# =============================================================================
+# ==========================================================================================================================================================
 # initialize the AprilTag processing
 def configureAprilTagDetection():
 
@@ -123,7 +124,7 @@ def configureAprilTagDetection():
     return detector, ov9282Estimator
 
 
-# =============================================================================
+# ==========================================================================================================================================================
 # detect Apriltags in a frame, Estimate Pose if any are found and update Network Tables
 def processApriltags(gray_frame, nt_name, detector, estimator):
 
@@ -158,7 +159,7 @@ def processApriltags(gray_frame, nt_name, detector, estimator):
                 ssd.putNumberArray("Pose", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
 
-# =============================================================================
+# ==========================================================================================================================================================
 # capture an AprilTag detection image from a USB video Capture
 # pass Network Tables entry string and Apriltag Pose Estimator on to Apriltag processor
 def processOV9282Apriltags(cap, nt_name, detector, estimator):
@@ -267,15 +268,10 @@ def configureODLiteAprilTagDetectionPipeline():
 
     return pipeline
 
-# =============================================================================
+
+# ==========================================================================================================================================================
 # initialize the OAK-D Lite neural network processing pipeline
 def configureODLiteObjectDetectionPipeline():
-
-    # Label texts
-    labelMap = ["robot", "note"]
-    syncNN = True
-    wideFOV = True
-    stereoDepth = True
 
     # Static setting for model BLOB, this runs on a RPi with a RO filesystem
     nnPath = str((Path(__file__).parent / Path('models/YOLOv5nNORO_openvino_2022.1_6shave416.blob')).resolve().absolute())
@@ -387,7 +383,7 @@ def configureODLiteObjectDetectionPipeline():
     return pipeline, output_stream
 
 
-# =============================================================================
+# ==========================================================================================================================================================
 def processODLiteObjects(qRgb, qTracklets, image_output_bandwidth_limit_counter, output_stream_nn):
 
     inRgb = qRgb.tryGet()
@@ -423,21 +419,43 @@ def processODLiteObjects(qRgb, qTracklets, image_output_bandwidth_limit_counter,
                         label = labelMap[t.label]
                     except:
                         label = t.label
-
+                        
                     cv2.putText(frame, str(label), (x1 + 10, y1 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
                     cv2.putText(frame, f"ID: {[t.id]}", (x1 + 10, y1 + 35), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
                     cv2.putText(frame, t.status.name, (x1 + 10, y1 + 50), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, cv2.FONT_HERSHEY_SIMPLEX)
-
+#
                     cv2.putText(frame, "X: {:.3f} m".format(float(t.spatialCoordinates.x)*0.001), (x1 + 10, y1 + 65), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
                     cv2.putText(frame, "Y: {:.3f} m".format(float(-t.spatialCoordinates.y)*0.001), (x1 + 10, y1 + 80), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
                     cv2.putText(frame, "Z: {:.3f} m".format(float(t.spatialCoordinates.z)*0.001), (x1 + 10, y1 + 95), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
 
-                    ssd=sd.getSubTable(f"ObjectCam/Object[{t.id}]")
-                    ssd.putString("Label", str(label))
-                    ssd.putString("Status", t.status.name)
-        #            sd.putNumber("Confidence", int(detection.confidence * 100))
-                    ssd.putNumberArray("Pose", [float(t.spatialCoordinates.x)*0.001, float(-t.spatialCoordinates.y)*0.001, float(t.spatialCoordinates.z)*0.001])
+                    # if the object is a note, do special processing
+                    if (str(label) == "note"):
+                        #if the object is a good note, allow new processing, else, lable as bad
+                        if (validNote((x2-x1), (y2-y1))):
+                            translation = getNote2dTranslation(x1, x2)
+                            ssd=sd.getSubTable(f"ObjectCam/Object[{t.id}]")
+                            ssd.putString("Label", str(label))
+                            ssd.putString("Status", t.status.name)
+                #            sd.putNumber("Confidence", int(detection.confidence * 100))
+                            ssd.putNumberArray("Pose", [translation[0], translation[1], 0.0])
+                        else:
+                            ssd=sd.getSubTable(f"ObjectCam/Object[{t.id}]")
+                            ssd.putString("Label", str(label))
+                            ssd.putString("Status", "BAD")
+                #            sd.putNumber("Confidence", int(detection.confidence * 100))
+                            
+                            # Rearange to be in NWU
+                            ssd.putNumberArray("Pose", [float(t.spatialCoordinates.z)*0.001, -float(t.spatialCoordinates.x)*0.001, -float(t.spatialCoordinates.y)*0.001])
+                    else:
+                        # If not note, do normal processing
+                        ssd=sd.getSubTable(f"ObjectCam/Object[{t.id}]")
+                        ssd.putString("Label", str(label))
+                        ssd.putString("Status", t.status.name)
+            #            sd.putNumber("Confidence", int(detection.confidence * 100))
+                        
+                        # Rearange to be in NWU
+                        ssd.putNumberArray("Pose", [float(t.spatialCoordinates.z)*0.001, -float(t.spatialCoordinates.x)*0.001, -float(t.spatialCoordinates.y)*0.001])
 
             # Update Latency data in networktables
             latency2 = dai.Clock.now() - inRgb.getTimestamp()
@@ -452,14 +470,54 @@ def processODLiteObjects(qRgb, qTracklets, image_output_bandwidth_limit_counter,
             # Instead publish to CameraServer output stream for NetworkTables or MJPEG http stream\
             # ... and lower the refresh rate to comply with FRC robot wireless bandwidth regulations
             image_output_bandwidth_limit_counter += 1
-            if image_output_bandwidth_limit_counter > 1:
+            if image_output_bandwidth_limit_counter > 2:
                 image_output_bandwidth_limit_counter = 0
-                output_stream_nn.putFrame(frame)
+                #output_stream_nn.putFrame(frame)
 
     return image_output_bandwidth_limit_counter
 
 
-# =============================================================================
+# ==========================================================================================================================================================
+# returns true if the ratio between the width and height is within an expected value 
+# this is to rule out notes that are sitting next to each other, or if there is an unfortuate orange robot
+def validNote(width, height):
+    if (width / height > 1.5 and width / height < 5.5): # based on data
+        return True
+    else:
+        return False
+
+
+# ==========================================================================================================================================================
+# Does math to determine the distance of the note from the camera
+# Experementaly gathered, returns in meters
+def getNoteDistance(width):
+    return 139 * pow(width, -1.16)
+
+
+# ==========================================================================================================================================================
+# Returns the percentage the note is horizontaly in the screen. left to right, 0.00 to 1.00 
+def getNotePercentAcrossScreen(centerx):
+    return (centerx / 320)
+
+
+# ==========================================================================================================================================================
+# Does math to deterime camera relative translation of the note in array
+def getNote2dTranslation(x1, x2):
+    centerx = x1 + (0.5 * (x2 - x1))
+    width = x2 - x1
+    
+    noteDistance = getNoteDistance(width)
+    noteTheta = (1.129) * (abs(0.5 - getNotePercentAcrossScreen(centerx))) # 1.129 is the measured fov after processing
+
+    translationx = noteDistance * (math.sin(noteTheta))
+    translationy = noteDistance * (math.cos(noteTheta))
+
+    # put in the x and y translation relative to the camera
+    noteTranslation = [translationx, translationy]
+
+    return noteTranslation
+
+# ==========================================================================================================================================================
 # main application entry point
 if __name__ == "__main__":
     time.sleep(5) # to make sure the rio is good
@@ -500,6 +558,7 @@ if __name__ == "__main__":
 
     # Configure the AprilTag detector
     detector, ov9282Estimator = configureAprilTagDetection()
+
 
     # DepthAI OAK-D Lite initialization
     pipeline, output_stream_nn = configureODLiteObjectDetectionPipeline()
