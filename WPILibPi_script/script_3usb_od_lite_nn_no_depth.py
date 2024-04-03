@@ -274,19 +274,11 @@ def configureODLiteAprilTagDetectionPipeline():
 def configureODLiteObjectDetectionPipeline():
 
     # Static setting for model BLOB, this runs on a RPi with a RO filesystem
-    nnPath = str((Path(__file__).parent / Path('models/YOLOv5nNORO_openvino_2022.1_6shave416.blob')).resolve().absolute())
+    nnPath = str((Path(__file__).parent / Path('models/yolov6n_20240221_320_20e_openvino_2022.1_6shave.blob')).resolve().absolute())
 
-    # nn_size has to match Neural Network settings: 416 pixels square
-    nn_size = 416
+    # Width and Height have to match Neural Network settings: 416x416 pixels
+    nn_size = 320
     output_stream = CameraServer.putVideo("ObjectCam", nn_size, nn_size)
-
-    # Width and Height of various image processing pipelines (optimized for speed and bandwidth)
-    # use an image manipulation prescaler to scale down 1/4 from the color camera: 4056x3040 -> 1014x760
-    isp_num = 1
-    isp_den = 4
-    rgb_width = 1014
-    rgb_height = 760
-
     # Pipeline tells DepthAI what operations to perform when running - you define all of the resources used and flows here
     pipeline = dai.Pipeline()
 
@@ -313,12 +305,12 @@ def configureODLiteObjectDetectionPipeline():
     if wideFOV:
         camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_12_MP)
         camRgb.setInterleaved(False)
-        camRgb.setIspScale(isp_num, isp_den)
-        camRgb.setPreviewSize(rgb_width, rgb_height)
+        camRgb.setIspScale(1,4) # 4056x3040 -> 1014x760
+        camRgb.setPreviewSize(1014, 760)
         camRgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)
         camRgb.setFps(20)
     else:
-        camRgb.setPreviewSize(320, 320)
+        camRgb.setPreviewSize(nn_size, nn_size)
         camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
         camRgb.setInterleaved(False)
         camRgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)
@@ -438,7 +430,7 @@ def processODLiteObjects(qRgb, qTracklets, image_output_bandwidth_limit_counter,
                             ssd.putString("Label", str(label))
                             ssd.putString("Status", t.status.name)
                 #            sd.putNumber("Confidence", int(detection.confidence * 100))
-                            ssd.putNumberArray("Pose", [translation[0], translation[1], 0.0])
+                            ssd.putNumberArray("Pose", [translation[0], translation[1], translation[2]])
                         else:
                             ssd=sd.getSubTable(f"ObjectCam/Object[{t.id}]")
                             ssd.putString("Label", str(label))
@@ -491,29 +483,33 @@ def validNote(width, height):
 # Does math to determine the distance of the note from the camera
 # Experementaly gathered, returns in meters
 def getNoteDistance(width):
-    return 139 * pow(width, -1.16)
+    #return 8.43 -(0.342 * width) + (0.00691 * pow(width, 2)) - (0.00774 * pow(width, 3)) + (0.000000485 * pow(width, 4)) - (0.0000159 * pow(width, 5)) + (0.00000000000211 * pow(width, 6)) 
+    return (139 * pow(width, -1.16))
 
 
 # ==========================================================================================================================================================
 # Returns the percentage the note is horizontaly in the screen. left to right, 0.00 to 1.00 
-def getNotePercentAcrossScreen(centerx):
-    return (centerx / 320)
+def getNotePercentFromCenter(centerx):
+    if (centerx < 160):  
+        return ((160 - centerx) / 160)
+    else:
+        return ((centerx - 160) / 160)
 
 
 # ==========================================================================================================================================================
 # Does math to deterime camera relative translation of the note in array
 def getNote2dTranslation(x1, x2):
     centerx = x1 + (0.5 * (x2 - x1))
-    width = x2 - x1
+    width = (x2 - x1)
     
     noteDistance = getNoteDistance(width)
-    noteTheta = (1.129) * (abs(0.5 - getNotePercentAcrossScreen(centerx))) # 1.129 is the measured fov after processing
+    noteTheta = (1.129 * 0.5) * getNotePercentFromCenter(centerx) # 1.129 is the measured fov after processing
 
-    translationx = noteDistance * (math.sin(noteTheta))
-    translationy = noteDistance * (math.cos(noteTheta))
+    translationx = noteDistance * (math.cos(noteTheta))
+    translationy = noteDistance * (math.sin(noteTheta))
 
     # put in the x and y translation relative to the camera
-    noteTranslation = [translationx, translationy]
+    noteTranslation = [translationx, translationy, noteDistance]
 
     return noteTranslation
 
